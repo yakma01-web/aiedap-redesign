@@ -1,0 +1,9 @@
+{
+  "name": "aiedap-redesign",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-10-01",
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "aiedap-redesign", "database_id": "80c0ce70-9fd5-4f09-b12b-00324ae61f8e" }
+  ]
+}

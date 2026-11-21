@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>강사용 데이터 확인 · AI 융합수업의 평가와 Re-design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f6f6f6;color:#12284f;font:400 16px/1.6 'Noto Sans KR',system-ui,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:28px 20px 80px}
+h1{font-size:26px;line-height:1.3;margin:0 0 6px;color:#00459A}
+h2{font-size:19px;margin:34px 0 10px;color:#00459A}
+p{margin:0 0 12px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+input{font:inherit;padding:11px 14px;min-height:46px;border:1px solid #6f8fcf;border-radius:10px;min-width:240px}
+button{font:inherit;min-height:46px;padding:10px 20px;border-radius:999px;border:0;background:#1E4CFD;color:#fff;cursor:pointer}
+button.ghost{background:#fff;color:#00459A;border:1px solid #6f8fcf}
+button.danger{background:#b91c1c}
+:focus-visible{outline:3px solid #1E4CFD;outline-offset:2px}
+table{border-collapse:collapse;width:100%;background:#fff;border-radius:12px;overflow:hidden}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid #e3ecff;vertical-align:top;font-size:15px}
+th{background:#eaf1ff;color:#00459A;font-weight:500;white-space:nowrap}
+td.n{text-align:right;white-space:nowrap}
+.muted{color:#5b6472;font-size:14px}
+#msg{color:#b91c1c;min-height:24px}
+.tablewrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<main>
+<h1>강사용 데이터 확인</h1>
+<p class="muted">연수생이 고른 평가 유형, 작성한 평가 기준, 모둠 진행 상태, 동료 피드백을 확인합니다. 성함은 서버에 저장하지 않습니다.</p>
+<div class="row">
+  <label for="key">강사 키</label>
+  <input id="key" type="password" autocomplete="off">
+  <button id="load" type="button">불러오기</button>
+  <button id="auto" type="button" class="ghost" aria-pressed="false">5초마다 새로 고침: 꺼짐</button>
+</div>
+<p id="msg" role="status"></p>
+<div id="out"></div>
+<h2>연수 후 정리</h2>
+<p class="muted">아래 버튼은 서버에 모인 데이터를 모두 지웁니다. 되돌릴 수 없습니다.</p>
+<div class="row">
+  <button id="clear" type="button" class="danger">서버 데이터 모두 삭제</button>
+  <span id="cmsg" class="muted" role="status"></span>
+</div>
+</main>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var SUB = { soc: '일반사회', his: '역사', geo: '지리', eth: '도덕, 윤리' };
+  var ET = { t: '교사 활용', s: '학생 활용', b: '모두 활용' };
+  var PH = { idle: '대기', talk: '설명 중', fb: '피드백 작성 중' };
+  var timer = null, armed = false;
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var tbl = function (head, rows) {
+    if (!rows.length) return '<p class="muted">아직 데이터가 없습니다.</p>';
+    return '<div class="tablewrap"><table><thead><tr>' + head.map(function (h) { return '<th scope="col">' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      rows.map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
+  };
+  function show(rows) {
+    var et = { t: 0, s: 0, b: 0 }, cr = [], fb = [], pv = [];
+    rows.forEach(function (r) {
+      var k = r.k.split(':');
+      if (k[0] === 'et' && et[r.v] != null) et[r.v] += 1;
+      if (k[0] === 'cr') { try { var o = JSON.parse(r.v); cr.push([SUB[o.sub] || o.sub, o.text]); } catch (e) {} }
+      if (k[0] === 'fb') fb.push([k[1] + '모둠', (Number(k[2]) + 1) + '번째 선생님', r.v]);
+      if (k[0] === 'pv') { try { var p = JSON.parse(r.v); pv.push([k[1] + '모둠', (p.idx + 1) + '번째 차례', PH[p.ph] || p.ph, (p.sk || []).map(function (i) { return i + 1; }).join(', ') || '-']); } catch (e) {} }
+    });
+    cr.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
+    pv.sort(function (a, b) { return parseInt(a[0], 10) - parseInt(b[0], 10); });
+    var total = et.t + et.s + et.b;
+    $('out').innerHTML =
+      '<h2>평가 유형 선택 (' + total + '명)</h2>' + tbl(['유형', '인원'], Object.keys(et).map(function (k) { return [ET[k], et[k] + '명']; })) +
+      '<h2>과목별 평가 기준 (' + cr.length + '건)</h2>' + tbl(['과목', '평가 기준'], cr) +
+      '<h2>모둠별 동료 검토 진행</h2>' + tbl(['모둠', '현재 차례', '상태', '건너뛴 순서'], pv) +
+      '<h2>동료 피드백 (' + fb.length + '건)</h2>' + tbl(['모둠', '받는 사람', '피드백'], fb);
+  }
+  function load() {
+    var key = $('key').value;
+    if (!key) { $('msg').textContent = '강사 키를 입력해 주세요.'; return; }
+    fetch('/api/admin?key=' + encodeURIComponent(key)).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); }).then(function (x) {
+      if (!x.ok) { $('msg').textContent = x.j.error === 'wrong key' ? '강사 키가 맞지 않습니다.' : '불러오지 못했습니다: ' + x.j.error; return; }
+      $('msg').textContent = '';
+      show(x.j.rows || []);
+    }).catch(function () { $('msg').textContent = '서버에 연결하지 못했습니다.'; });
+  }
+  $('load').onclick = load;
+  $('key').onkeydown = function (e) { if (e.key === 'Enter') load(); };
+  $('auto').onclick = function () {
+    var on = !timer;
+    if (timer) { clearInterval(timer); timer = null; } else { load(); timer = setInterval(load, 5000); }
+    $('auto').setAttribute('aria-pressed', on ? 'true' : 'false');
+    $('auto').textContent = '5초마다 새로 고침: ' + (on ? '켜짐' : '꺼짐');
+  };
+  $('clear').onclick = function () {
+    if (!armed) { armed = true; $('clear').textContent = '정말 삭제합니다 (한 번 더 누르기)'; $('cmsg').textContent = '삭제하려면 한 번 더 눌러 주세요.'; setTimeout(function () { armed = false; $('clear').textContent = '서버 데이터 모두 삭제'; }, 6000); return; }
+    armed = false;
+    fetch('/api/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: $('key').value, action: 'clear' }) })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); }).then(function (x) {
+        $('clear').textContent = '서버 데이터 모두 삭제';
+        $('cmsg').textContent = x.ok ? '모두 삭제했습니다.' : (x.j.error === 'wrong key' ? '강사 키가 맞지 않습니다.' : '삭제하지 못했습니다.');
+        if (x.ok) load();
+      }).catch(function () { $('cmsg').textContent = '서버에 연결하지 못했습니다.'; });
+  };
+})();
+</script>
+</body>
+</html>
