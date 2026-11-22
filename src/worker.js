@@ -3,6 +3,8 @@
 //   cr:<uid>            {"sub": "...", "text": "..."}  assessment criterion per subject
 //   fb:<group>:<i>:<uid> feedback text for member i of a group
 //   pv:<group>          {"v","idx","sk","cur","ph","t0"}  whose turn it is in a group
+//   xet:<uid>, xcr:<uid> the same answers after that person logged out: hidden from the live chart and
+//                       word cloud, still listed on the instructor page
 //   admin               sha-256 of the instructor key
 const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const int = (x, lo, hi, d) => { const n = Number(x); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : d; };
@@ -32,14 +34,23 @@ async function api(request, env) {
       if (/^et:[0-9a-f]{1,8}$/.test(k)) {
         const v = String(b.v);
         if (!/^[tsb]$/.test(v)) return J({ error: 'bad value' }, 400);
-        await db.prepare(UP).bind(k, v, now).run();
+        await db.batch([db.prepare(UP).bind(k, v, now), db.prepare('DELETE FROM kv WHERE k = ?').bind('x' + k)]);
         return J({ ok: 1 });
       }
       if (/^cr:[0-9a-f]{1,8}$/.test(k)) {
         let o;
         try { o = JSON.parse(String(b.v)); } catch (e) { return J({ error: 'bad value' }, 400); }
         if (!o || !/^(soc|his|geo|eth)$/.test(o.sub)) return J({ error: 'bad value' }, 400);
-        await db.prepare(UP).bind(k, JSON.stringify({ sub: o.sub, text: String(o.text || '').slice(0, 1000) }), now).run();
+        await db.batch([db.prepare(UP).bind(k, JSON.stringify({ sub: o.sub, text: String(o.text || '').slice(0, 1000) }), now), db.prepare('DELETE FROM kv WHERE k = ?').bind('x' + k)]);
+        return J({ ok: 1 });
+      }
+      if (/^out:[0-9a-f]{1,8}$/.test(k)) {
+        // logout: take this person's answers out of the live views but keep them for the instructor page
+        const u = k.slice(4);
+        await db.batch([
+          db.prepare("INSERT INTO kv (k, v, t) SELECT 'x' || k, v, t FROM kv WHERE k IN (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v, t = excluded.t").bind('et:' + u, 'cr:' + u),
+          db.prepare('DELETE FROM kv WHERE k IN (?, ?)').bind('et:' + u, 'cr:' + u)
+        ]);
         return J({ ok: 1 });
       }
       if (/^fb:\d{1,2}:\d{1,2}:[0-9a-f]{1,8}$/.test(k)) {

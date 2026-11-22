@@ -61,11 +61,11 @@ td.n{text-align:right;white-space:nowrap}
       rows.map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
   };
   function show(rows) {
-    var et = { t: 0, s: 0, b: 0 }, cr = [], fb = [], pv = [];
+    var et = { t: 0, s: 0, b: 0 }, cr = [], fb = [], pv = [], gone = 0;
     rows.forEach(function (r) {
       var k = r.k.split(':');
-      if (k[0] === 'et' && et[r.v] != null) et[r.v] += 1;
-      if (k[0] === 'cr') { try { var o = JSON.parse(r.v); cr.push([SUB[o.sub] || o.sub, o.text]); } catch (e) {} }
+      if ((k[0] === 'et' || k[0] === 'xet') && et[r.v] != null) { et[r.v] += 1; if (k[0] === 'xet') gone += 1; }
+      if (k[0] === 'cr' || k[0] === 'xcr') { try { var o = JSON.parse(r.v); cr.push([SUB[o.sub] || o.sub, o.text, k[0] === 'xcr' ? '로그아웃' : '접속 중']); } catch (e) {} }
       if (k[0] === 'fb') fb.push([k[1] + '모둠', (Number(k[2]) + 1) + '번째 선생님', r.v]);
       if (k[0] === 'pv') { try { var p = JSON.parse(r.v); pv.push([k[1] + '모둠', (p.idx + 1) + '번째 차례', PH[p.ph] || p.ph, (p.sk || []).map(function (i) { return i + 1; }).join(', ') || '-']); } catch (e) {} }
     });
@@ -73,8 +73,8 @@ td.n{text-align:right;white-space:nowrap}
     pv.sort(function (a, b) { return parseInt(a[0], 10) - parseInt(b[0], 10); });
     var total = et.t + et.s + et.b;
     $('out').innerHTML =
-      '<h2>평가 유형 선택 (' + total + '명)</h2>' + tbl(['유형', '인원'], Object.keys(et).map(function (k) { return [ET[k], et[k] + '명']; })) +
-      '<h2>과목별 평가 기준 (' + cr.length + '건)</h2>' + tbl(['과목', '평가 기준'], cr) +
+      '<h2>평가 유형 선택 (' + total + '명)</h2><p class="muted">로그아웃한 연수생 ' + gone + '명을 포함한 전체 집계입니다. 연수생 화면의 그래프에는 접속 중인 연수생만 나옵니다.</p>' + tbl(['유형', '인원'], Object.keys(et).map(function (k) { return [ET[k], et[k] + '명']; })) +
+      '<h2>과목별 평가 기준 (' + cr.length + '건)</h2>' + tbl(['과목', '평가 기준', '상태'], cr) +
       '<h2>모둠별 동료 검토 진행</h2>' + tbl(['모둠', '현재 차례', '상태', '건너뛴 순서'], pv) +
       '<h2>동료 피드백 (' + fb.length + '건)</h2>' + tbl(['모둠', '받는 사람', '피드백'], fb);
   }
